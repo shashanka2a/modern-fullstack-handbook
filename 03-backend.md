@@ -193,10 +193,10 @@ app.post('/auth/refresh', (req, res) => {
 
 ## 3.6 Mini Project
 
-Build a small Express API with two endpoints:
+Build a weather API with authentication:
 
 - **POST /auth/login** – returns JWT tokens after verifying a dummy user
-- **GET /profile** – returns user profile only if a valid access token is provided
+- **GET /weather/:city** – returns weather data only if a valid access token is provided
 
 ### Complete Implementation:
 
@@ -301,14 +301,29 @@ const authenticateToken = (req, res, next) => {
   });
 };
 
-app.get('/profile', authenticateToken, (req, res) => {
+// Mock weather data
+const weatherData = {
+  london: { temp: 15, condition: 'Cloudy', humidity: 78 },
+  newyork: { temp: 22, condition: 'Sunny', humidity: 65 },
+  tokyo: { temp: 18, condition: 'Rainy', humidity: 82 },
+  sydney: { temp: 25, condition: 'Sunny', humidity: 60 }
+};
+
+app.get('/weather/:city', authenticateToken, (req, res) => {
+  const { city } = req.params;
+  const cityKey = city.toLowerCase();
+  
+  const weather = weatherData[cityKey] || {
+    temp: Math.floor(Math.random() * 30) + 5,
+    condition: 'Unknown',
+    humidity: Math.floor(Math.random() * 40) + 40
+  };
+  
   res.json({
-    message: 'Profile data retrieved successfully',
-    user: {
-      id: req.user.userId,
-      email: req.user.email,
-      lastLogin: new Date().toISOString()
-    }
+    city: city,
+    ...weather,
+    timestamp: new Date().toISOString(),
+    user: req.user.email
   });
 });
 
@@ -332,13 +347,13 @@ app.listen(PORT, () => {
      -d '{"email": "demo@example.com", "password": "password123"}'
    ```
 
-3. **Test protected route** (use the token from login response):
+3. **Test weather route** (use the token from login response):
    ```bash
-   curl -X GET http://localhost:8080/profile \
+   curl -X GET http://localhost:8080/weather/london \
      -H "Authorization: Bearer YOUR_ACCESS_TOKEN_HERE"
    ```
 
-This project demonstrates authentication and clean API layering principles that are essential for production applications.
+This project demonstrates authentication and clean API layering with a simple, relatable weather service that students can easily understand and extend.
 
 ---
 

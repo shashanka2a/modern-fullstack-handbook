@@ -84,7 +84,7 @@ import Redis from 'ioredis';
 // Route imports
 import authRoutes from './routes/auth.js';
 import userRoutes from './routes/users.js';
-import transactionRoutes from './routes/transactions.js';
+import weatherHistoryRoutes from './routes/weatherHistory.js';
 import weatherRoutes from './routes/weather.js';
 
 // Middleware imports
@@ -138,8 +138,8 @@ app.get('/health', async (req, res) => {
 // API routes
 app.use('/api/auth', authRoutes);
 app.use('/api/users', authenticateToken, userRoutes);
-app.use('/api/transactions', authenticateToken, transactionRoutes);
 app.use('/api/weather', weatherRoutes);
+app.use('/api/weather-history', authenticateToken, weatherHistoryRoutes);
 
 // Error handling
 app.use(errorHandler);
@@ -197,9 +197,9 @@ model User {
   updatedAt DateTime @updatedAt
   
   // Relations
-  transactions Transaction[]
-  sessions     Session[]
-  auditLogs    AuditLog[]
+  weatherRequests WeatherRequest[]
+  sessions        Session[]
+  auditLogs       AuditLog[]
   
   @@map("users")
 }
@@ -216,27 +216,19 @@ model Session {
   @@map("sessions")
 }
 
-model Transaction {
-  id               String   @id @default(cuid())
-  userId           String
-  beneficiaryId    String
-  sourceAmount     Decimal  @db.Decimal(18,2)
-  sourceCurrency   String
-  targetAmount     Decimal  @db.Decimal(18,2)
-  targetCurrency   String
-  fxRate           Decimal  @db.Decimal(18,6)
-  feeFixed         Decimal  @db.Decimal(18,2)
-  feePct           Decimal  @db.Decimal(5,4)
-  status           TransactionStatus @default(PENDING)
-  highRisk         Boolean  @default(false)
-  reference        String   @unique @default(cuid())
-  notes            String?
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+model WeatherRequest {
+  id          String   @id @default(cuid())
+  userId      String
+  city        String
+  temperature Int
+  condition   String
+  humidity    Int
+  cached      Boolean  @default(false)
+  createdAt   DateTime @default(now())
   
   user User @relation(fields: [userId], references: [id])
   
-  @@map("transactions")
+  @@map("weather_requests")
 }
 
 model AuditLog {
@@ -264,13 +256,7 @@ model WeatherRequest {
   @@map("weather_requests")
 }
 
-enum TransactionStatus {
-  PENDING
-  PROCESSING
-  COMPLETED
-  FAILED
-  CANCELLED
-}
+
 ```
 
 ### Frontend Integration (`frontend/pages/dashboard.js`)
@@ -279,12 +265,12 @@ enum TransactionStatus {
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import Layout from '../components/Layout';
-import TransactionList from '../components/TransactionList';
+import WeatherHistory from '../components/WeatherHistory';
 import WeatherWidget from '../components/WeatherWidget';
 
 export default function Dashboard() {
   const [user, setUser] = useState(null);
-  const [transactions, setTransactions] = useState([]);
+  const [weatherHistory, setWeatherHistory] = useState([]);
   const [weather, setWeather] = useState(null);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
@@ -310,14 +296,14 @@ export default function Dashboard() {
       const profileData = await profileRes.json();
       setUser(profileData.user);
 
-      // Load transactions
-      const txnRes = await fetch('/api/transactions', {
+      // Load weather history
+      const historyRes = await fetch('/api/weather-history', {
         headers: { Authorization: `Bearer ${token}` }
       });
       
-      if (txnRes.ok) {
-        const txnData = await txnRes.json();
-        setTransactions(txnData.transactions);
+      if (historyRes.ok) {
+        const historyData = await historyRes.json();
+        setWeatherHistory(historyData);
       }
 
       // Load weather for user's location (demo: London)
@@ -339,24 +325,23 @@ export default function Dashboard() {
     }
   };
 
-  const createTransaction = async (transactionData) => {
+  const getWeatherForCity = async (city) => {
     try {
       const token = localStorage.getItem('accessToken');
-      const response = await fetch('/api/transactions', {
-        method: 'POST',
+      const response = await fetch(`/api/weather/${city}`, {
         headers: {
-          'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`
-        },
-        body: JSON.stringify(transactionData)
+        }
       });
 
       if (response.ok) {
-        // Reload transactions
+        const weatherData = await response.json();
+        setWeather(weatherData);
+        // Reload history to show new request
         loadDashboardData();
       }
     } catch (error) {
-      console.error('Create transaction error:', error);
+      console.error('Get weather error:', error);
     }
   };
 
@@ -379,7 +364,7 @@ export default function Dashboard() {
             Welcome back, {user?.firstName || user?.email}!
           </h1>
           <p className="text-gray-600">
-            Manage your transactions and monitor market conditions
+            Check weather conditions and view your search history
           </p>
         </div>
 
@@ -387,9 +372,9 @@ export default function Dashboard() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Main Content */}
           <div className="lg:col-span-2">
-            <TransactionList 
-              transactions={transactions}
-              onCreateTransaction={createTransaction}
+            <WeatherHistory 
+              weatherHistory={weatherHistory}
+              onGetWeather={getWeatherForCity}
             />
           </div>
 
@@ -402,21 +387,21 @@ export default function Dashboard() {
               <h3 className="text-lg font-semibold mb-4">Quick Stats</h3>
               <div className="space-y-3">
                 <div className="flex justify-between">
-                  <span className="text-gray-600">Total Transactions</span>
-                  <span className="font-semibold">{transactions.length}</span>
+                  <span className="text-gray-600">Total Searches</span>
+                  <span className="font-semibold">{weatherHistory.length}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-600">This Month</span>
                   <span className="font-semibold">
-                    {transactions.filter(t => 
-                      new Date(t.createdAt).getMonth() === new Date().getMonth()
+                    {weatherHistory.filter(w => 
+                      new Date(w.createdAt).getMonth() === new Date().getMonth()
                     ).length}
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-600">Completed</span>
+                  <span className="text-gray-600">Cached Results</span>
                   <span className="font-semibold text-green-600">
-                    {transactions.filter(t => t.status === 'COMPLETED').length}
+                    {weatherHistory.filter(w => w.cached).length}
                   </span>
                 </div>
               </div>

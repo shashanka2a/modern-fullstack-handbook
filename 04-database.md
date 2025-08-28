@@ -31,23 +31,18 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   
-  transactions Transaction[]
+  weatherRequests WeatherRequest[]
 }
 
-model Transaction {
-  id               String   @id @default(cuid())
-  userId           String
-  beneficiaryId    String
-  sourceAmount     Decimal  @db.Decimal(18,2)
-  sourceCurrency   String
-  targetAmount     Decimal  @db.Decimal(18,2)
-  targetCurrency   String
-  fxRate           Decimal  @db.Decimal(18,6)
-  feeFixed         Decimal  @db.Decimal(18,2)
-  feePct           Decimal  @db.Decimal(5,4)
-  status           String
-  highRisk         Boolean  @default(false)
-  createdAt        DateTime @default(now())
+model WeatherRequest {
+  id          String   @id @default(cuid())
+  userId      String
+  city        String
+  temperature Int
+  condition   String
+  humidity    Int
+  cached      Boolean  @default(false)
+  createdAt   DateTime @default(now())
   
   user User @relation(fields: [userId], references: [id])
 }
@@ -64,8 +59,8 @@ import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
-// Get user transactions
-const txns = await prisma.transaction.findMany({
+// Get user weather requests
+const weatherRequests = await prisma.weatherRequest.findMany({
   where: { userId },
   orderBy: { createdAt: 'desc' },
   take: 50,
@@ -130,23 +125,18 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   
-  transactions Transaction[]
+  weatherRequests WeatherRequest[]
 }
 
-model Transaction {
-  id               String   @id @default(cuid())
-  userId           String
-  beneficiaryId    String
-  sourceAmount     Decimal  @db.Decimal(18,2)
-  sourceCurrency   String
-  targetAmount     Decimal  @db.Decimal(18,2)
-  targetCurrency   String
-  fxRate           Decimal  @db.Decimal(18,6)
-  feeFixed         Decimal  @db.Decimal(18,2)
-  feePct           Decimal  @db.Decimal(5,4)
-  status           String   @default("pending")
-  highRisk         Boolean  @default(false)
-  createdAt        DateTime @default(now())
+model WeatherRequest {
+  id          String   @id @default(cuid())
+  userId      String
+  city        String
+  temperature Int
+  condition   String
+  humidity    Int
+  cached      Boolean  @default(false)
+  createdAt   DateTime @default(now())
   
   user User @relation(fields: [userId], references: [id])
 }
@@ -189,26 +179,22 @@ async function main() {
     
     console.log('Created user:', user);
     
-    // Create a transaction
-    const transaction = await prisma.transaction.create({
+    // Create a weather request
+    const weatherRequest = await prisma.weatherRequest.create({
       data: {
         userId: user.id,
-        beneficiaryId: 'beneficiary_123',
-        sourceAmount: 100.00,
-        sourceCurrency: 'USD',
-        targetAmount: 85.50,
-        targetCurrency: 'EUR',
-        fxRate: 0.855,
-        feeFixed: 2.50,
-        feePct: 0.015,
-        status: 'completed'
+        city: 'London',
+        temperature: 15,
+        condition: 'Cloudy',
+        humidity: 78,
+        cached: false
       }
     });
     
-    console.log('Created transaction:', transaction);
+    console.log('Created weather request:', weatherRequest);
     
-    // Query transactions with user info
-    const transactions = await prisma.transaction.findMany({
+    // Query weather requests with user info
+    const weatherRequests = await prisma.weatherRequest.findMany({
       where: { userId: user.id },
       include: {
         user: {
@@ -217,7 +203,7 @@ async function main() {
       }
     });
     
-    console.log('User transactions:', transactions);
+    console.log('User weather requests:', weatherRequests);
     
   } catch (error) {
     console.error('Error:', error);
@@ -236,9 +222,9 @@ node test-db.js
 
 ## 4.5 Mini Project
 
-Build a database-backed service that integrates with the Express API from Chapter 3.
+Build a weather service with database logging that integrates with the Express API from Chapter 3.
 
-### Updated Express Server with Prisma
+### Updated Weather API Server with Prisma
 
 ```javascript
 import express from 'express';
@@ -370,54 +356,63 @@ const authenticateToken = (req, res, next) => {
   });
 };
 
-// Get user transactions
-app.get('/transactions', authenticateToken, async (req, res) => {
+// Get user weather history
+app.get('/weather/history', authenticateToken, async (req, res) => {
   try {
-    const transactions = await prisma.transaction.findMany({
+    const weatherRequests = await prisma.weatherRequest.findMany({
       where: { userId: req.user.userId },
       orderBy: { createdAt: 'desc' },
       take: 50
     });
     
-    res.json(transactions);
+    res.json(weatherRequests);
     
   } catch (error) {
-    console.error('Get transactions error:', error);
+    console.error('Get weather history error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-// Create transaction
-app.post('/transactions', authenticateToken, async (req, res) => {
+// Get weather for city (with database logging)
+app.get('/weather/:city', authenticateToken, async (req, res) => {
   try {
-    const {
-      beneficiaryId,
-      sourceAmount,
-      sourceCurrency,
-      targetAmount,
-      targetCurrency,
-      fxRate
-    } = req.body;
+    const { city } = req.params;
     
-    const transaction = await prisma.transaction.create({
+    // Mock weather data
+    const weatherData = {
+      london: { temp: 15, condition: 'Cloudy', humidity: 78 },
+      newyork: { temp: 22, condition: 'Sunny', humidity: 65 },
+      tokyo: { temp: 18, condition: 'Rainy', humidity: 82 }
+    };
+    
+    const cityKey = city.toLowerCase();
+    const weather = weatherData[cityKey] || {
+      temp: Math.floor(Math.random() * 30) + 5,
+      condition: 'Unknown',
+      humidity: Math.floor(Math.random() * 40) + 40
+    };
+    
+    // Log the request to database
+    const weatherRequest = await prisma.weatherRequest.create({
       data: {
         userId: req.user.userId,
-        beneficiaryId,
-        sourceAmount: parseFloat(sourceAmount),
-        sourceCurrency,
-        targetAmount: parseFloat(targetAmount),
-        targetCurrency,
-        fxRate: parseFloat(fxRate),
-        feeFixed: 2.50, // Fixed fee
-        feePct: 0.015,  // 1.5% fee
-        status: 'pending'
+        city: city,
+        temperature: weather.temp,
+        condition: weather.condition,
+        humidity: weather.humidity,
+        cached: false
       }
     });
     
-    res.status(201).json(transaction);
+    res.json({
+      city,
+      ...weather,
+      timestamp: new Date().toISOString(),
+      requestId: weatherRequest.id
+    });
     
   } catch (error) {
-    console.error('Create transaction error:', error);
+    console.error('Get weather error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -450,28 +445,19 @@ app.listen(PORT, () => {
      -d '{"email": "test@example.com", "password": "password123"}'
    ```
 
-3. **Create a transaction** (use token from login):
+3. **Get weather for a city** (use token from login):
    ```bash
-   curl -X POST http://localhost:8080/transactions \
-     -H "Content-Type: application/json" \
-     -H "Authorization: Bearer YOUR_TOKEN" \
-     -d '{
-       "beneficiaryId": "ben_123",
-       "sourceAmount": 100,
-       "sourceCurrency": "USD",
-       "targetAmount": 85.50,
-       "targetCurrency": "EUR",
-       "fxRate": 0.855
-     }'
-   ```
-
-4. **Get transactions**:
-   ```bash
-   curl -X GET http://localhost:8080/transactions \
+   curl -X GET http://localhost:8080/weather/london \
      -H "Authorization: Bearer YOUR_TOKEN"
    ```
 
-This demonstrates how Prisma integrates seamlessly with Express and PostgreSQL, providing type-safe database operations with minimal boilerplate.
+4. **Get weather history**:
+   ```bash
+   curl -X GET http://localhost:8080/weather/history \
+     -H "Authorization: Bearer YOUR_TOKEN"
+   ```
+
+This demonstrates how Prisma integrates seamlessly with Express and PostgreSQL for a simple weather service, providing type-safe database operations with minimal boilerplate.
 
 ## Key Benefits Demonstrated
 

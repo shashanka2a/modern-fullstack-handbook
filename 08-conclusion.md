@@ -69,13 +69,14 @@ Mastering this modern stack prepares you for multiple career paths:
 
 Here's how you can continue building on what you've learned:
 
-### **1. Expand the Capstone Project**
-Take the weather + transaction app and add new features:
-- **File uploads** with cloud storage (AWS S3, Cloudinary)
-- **Real-time chat** using WebSockets or Socket.io
-- **Payment processing** with Stripe or PayPal integration
-- **Email notifications** with SendGrid or Nodemailer
+### **1. Expand the Weather App**
+Take the weather dashboard and add new features:
+- **Weather maps** with interactive visualizations
+- **Real-time weather alerts** using WebSockets
+- **Weather forecasts** with 7-day predictions
+- **Location-based weather** using geolocation API
 - **Mobile app** using React Native or Expo
+- **Weather data export** to CSV/PDF formats
 
 ### **2. Join Hackathons**
 - **Apply your skills** in time-pressured environments
